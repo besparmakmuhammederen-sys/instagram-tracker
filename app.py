@@ -10,15 +10,25 @@ from pathlib import Path
 from threading import Thread, Event
 from time import sleep
 
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger(__name__)
+
+@app.after_request
+def log_request(response):
+    log.debug("%s %s -> %s", request.method, request.path, response.status_code)
+    return response
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    log.exception("Unhandled error on %s %s", request.method, request.path)
+    return "Internal Server Error", 500
 
 # --- Config from .env ---
 IG_USERNAME = os.getenv("IG_USERNAME")
@@ -144,8 +154,10 @@ def check_loop():
         sleep(CHECK_INTERVAL * 60)
 
 # --- Web routes ---
-@app.route("/")
+@app.route("/", methods=["GET", "HEAD"])
 def index():
+    if request.method == "HEAD":
+        return "", 200
     data = load_data()
     return render_template("index.html",
         targets=TARGET_USERNAMES,
