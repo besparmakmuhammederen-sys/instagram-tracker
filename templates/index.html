@@ -69,7 +69,7 @@
                             <tr><th>Tarih</th><th class="text-end">Takipçi</th><th class="text-end">Takip</th></tr>
                         </thead>
                         <tbody>
-                            {% for h in history reversed %}
+                            {% for h in history | reverse %}
                             <tr>
                                 <td class="text-muted">{{ h.time[:16] }}</td>
                                 <td class="text-end fw-medium">{{ h.followers }}</td>
