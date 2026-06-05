@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IG Takipçi Takip</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #fafafa; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .stat-card { border-radius: 16px; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .stat-card .card-body { padding: 1.5rem; }
+        .stat-value { font-size: 2rem; font-weight: 600; }
+        .stat-label { font-size: 0.85rem; color: #8e8e8e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .change-up { color: #10b981; }
+        .change-down { color: #ef4444; }
+        .header { background: linear-gradient(135deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color: white; padding: 2rem 0; margin-bottom: 2rem; border-radius: 0 0 20px 20px; }
+        .header h1 { font-weight: 700; margin: 0; }
+        .chart-container { background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .status-badge { font-size: 0.75rem; padding: 0.25rem 0.75rem; border-radius: 20px; background: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body>
+    <div class="header text-center">
+        <h1>@{{ target }}</h1>
+        <span class="status-badge" id="statusBadge">Aktif</span>
+    </div>
+
+    <div class="container" style="max-width: 600px;">
+        <div class="row g-3 mb-4">
+            <div class="col-6">
+                <div class="card stat-card">
+                    <div class="card-body text-center">
+                        <div class="stat-label">Takipçi</div>
+                        <div class="stat-value" id="followers">{{ last.followers if last else '?' }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card stat-card">
+                    <div class="card-body text-center">
+                        <div class="stat-label">Takip</div>
+                        <div class="stat-value" id="following">{{ last.following if last else '?' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container mb-4">
+            <canvas id="chart" height="200"></canvas>
+        </div>
+
+        <div class="card stat-card">
+            <div class="card-header bg-transparent" style="border-bottom: 1px solid #efefef;">
+                <strong>Son Kontroller</strong>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless mb-0" id="historyTable">
+                        <thead class="text-muted" style="font-size: 0.75rem;">
+                            <tr><th>Tarih</th><th class="text-end">Takipçi</th><th class="text-end">Takip</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for h in history reversed %}
+                            <tr style="font-size: 0.85rem;">
+                                <td class="text-muted">{{ h.time[:16] }}</td>
+                                <td class="text-end fw-medium">{{ h.followers }}</td>
+                                <td class="text-end fw-medium">{{ h.following }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-center text-muted small mt-4">
+            Her {{ interval }} dakikada bir güncellenir
+        </p>
+    </div>
+
+    <script>
+        const history = {{ history | tojson }};
+        const intervalMinutes = {{ interval }};
+
+        if (history.length > 0) {
+            const labels = history.map(h => h.time.slice(5, 16));
+            const followers = history.map(h => h.followers);
+            const following = history.map(h => h.following);
+
+            new Chart(document.getElementById('chart'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Takipçi', data: followers, borderColor: '#0095f6', backgroundColor: 'rgba(0,149,246,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+                        { label: 'Takip', data: following, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.3, pointRadius: 2 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true, position: 'top' } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 10 } } },
+                        y: { beginAtZero: false, grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
