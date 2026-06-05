@@ -145,11 +145,16 @@ def check_loop():
 
         save_data(data)
 
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         if all_changes:
             log.info("Changes detected: %s", "; ".join(all_changes))
             subject = f"[IG Tracker] {'; '.join(all_changes)}"
-            body = "\n".join(all_changes) + f"\n\nTarih: {now}"
-            send_email(subject, body)
+            body = "\n".join(all_changes) + f"\n\nTarih: {now_str}"
+        else:
+            summary = ", ".join([f"@{u}: {data.get(u,{}).get('last',{}).get('followers','?')}" for u in TARGET_USERNAMES])
+            subject = f"[IG Tracker] {now_str} - Degisiklik yok"
+            body = f"Tarih: {now_str}\n\n{summary}"
+        send_email(subject, body)
 
         sleep(CHECK_INTERVAL * 60)
 
