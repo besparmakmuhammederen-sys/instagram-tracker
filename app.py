@@ -3,7 +3,7 @@ import json
 import logging
 import smtplib
 import ssl
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from pathlib import Path
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 # --- Config from .env ---
 IG_USERNAME = os.getenv("IG_USERNAME")
 IG_PASSWORD = os.getenv("IG_PASSWORD")
-TARGET_USERNAME = os.getenv("TARGET_USERNAME")
+TARGET_USERNAMES = [u.strip() for u in os.getenv("TARGET_USERNAMES", "").split(",") if u.strip()]
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -64,7 +64,7 @@ def load_data():
     if DATA_FILE.exists():
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"history": [], "last": None}
+    return {}
 
 def save_data(data):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -90,48 +90,55 @@ def fetch_stats(username):
 
 # --- Background checker ---
 def check_loop():
-    log.info("Background checker started")
+    log.info("Background checker started for: %s", ", ".join(TARGET_USERNAMES))
     while not stop_event.is_set():
-        if not TARGET_USERNAME:
+        if not TARGET_USERNAMES:
             sleep(60)
             continue
+
         data = load_data()
-        stats = fetch_stats(TARGET_USERNAME)
-        if not stats:
-            sleep(CHECK_INTERVAL * 60)
-            continue
+        all_changes = []
 
-        now = datetime.now().isoformat()
-        entry = {
-            "time": now,
-            "followers": stats["followers"],
-            "following": stats["following"],
-            "posts": stats["posts"],
-        }
-        data["history"].append(entry)
-        # Keep last 1000 entries
-        if len(data["history"]) > 1000:
-            data["history"] = data["history"][-1000:]
+        for username in TARGET_USERNAMES:
+            stats = fetch_stats(username)
+            if not stats:
+                continue
 
-        last = data["last"]
-        changes = []
-        if last:
-            if stats["followers"] != last["followers"]:
-                diff = stats["followers"] - last["followers"]
-                direction = "arti" if diff > 0 else "eksi"
-                changes.append(f"Takipci: {last['followers']} -> {stats['followers']} ({direction} {abs(diff)})")
-            if stats["following"] != last["following"]:
-                diff = stats["following"] - last["following"]
-                direction = "arti" if diff > 0 else "eksi"
-                changes.append(f"Takip: {last['following']} -> {stats['following']} ({direction} {abs(diff)})")
+            now = datetime.now().isoformat()
+            entry = {
+                "time": now,
+                "followers": stats["followers"],
+                "following": stats["following"],
+                "posts": stats["posts"],
+            }
 
-        data["last"] = {"followers": stats["followers"], "following": stats["following"], "posts": stats["posts"]}
+            user_data = data.get(username, {"history": [], "last": None})
+            user_data["history"].append(entry)
+            if len(user_data["history"]) > 1000:
+                user_data["history"] = user_data["history"][-1000:]
+
+            last = user_data.get("last")
+            changes = []
+            if last:
+                if stats["followers"] != last["followers"]:
+                    diff = stats["followers"] - last["followers"]
+                    direction = "artti" if diff > 0 else "dustu"
+                    changes.append(f"@{username} Takipci: {last['followers']} -> {stats['followers']} ({direction} {abs(diff)})")
+                if stats["following"] != last["following"]:
+                    diff = stats["following"] - last["following"]
+                    direction = "artti" if diff > 0 else "dustu"
+                    changes.append(f"@{username} Takip: {last['following']} -> {stats['following']} ({direction} {abs(diff)})")
+
+            user_data["last"] = {"followers": stats["followers"], "following": stats["following"], "posts": stats["posts"]}
+            data[username] = user_data
+            all_changes.extend(changes)
+
         save_data(data)
 
-        if changes:
-            log.info("Change detected: %s", "; ".join(changes))
-            subject = f"[IG Tracker] @{TARGET_USERNAME} - {'; '.join(changes)}"
-            body = f"@{TARGET_USERNAME}\nTarih: {now}\n\n" + "\n".join(changes)
+        if all_changes:
+            log.info("Changes detected: %s", "; ".join(all_changes))
+            subject = f"[IG Tracker] {'; '.join(all_changes)}"
+            body = "\n".join(all_changes) + f"\n\nTarih: {now}"
             send_email(subject, body)
 
         sleep(CHECK_INTERVAL * 60)
@@ -141,24 +148,23 @@ def check_loop():
 def index():
     data = load_data()
     return render_template("index.html",
-        target=TARGET_USERNAME,
-        last=data.get("last"),
-        history=data.get("history", [])[-20:],
+        targets=TARGET_USERNAMES,
+        data=data,
+        interval=CHECK_INTERVAL,
     )
 
 @app.route("/api/status")
 def api_status():
     data = load_data()
     return jsonify({
-        "target": TARGET_USERNAME,
-        "last": data.get("last"),
-        "total_checks": len(data.get("history", [])),
+        "targets": TARGET_USERNAMES,
+        "data": data,
     })
 
-@app.route("/api/history")
-def api_history():
+@app.route("/api/history/<username>")
+def api_history(username):
     data = load_data()
-    return jsonify(data.get("history", []))
+    return jsonify(data.get(username, {}).get("history", []))
 
 # --- Start background thread ---
 thread = Thread(target=check_loop, daemon=True)
